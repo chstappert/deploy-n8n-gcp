@@ -149,6 +149,58 @@ What happens:
 
 After upgrading, update `DB_VERSION=POSTGRES_16` in your `.env` so future full deploys use the correct version.
 
+## Queue Mode (scaling)
+
+For high-throughput scenarios, n8n supports **queue mode** — separating the UI/webhook handler from workflow execution workers connected via Redis.
+
+```
+Load Balancer → n8n Main (UI + webhooks)
+                       ↓ enqueues jobs
+                    Redis (Memorystore)
+                       ↓ picks up jobs
+              n8n Workers (auto-scaled)
+                       ↓
+                  Cloud SQL (shared)
+```
+
+### Setup
+
+```bash
+# 1. Copy queue-mode config
+cp .env.queue.example .env
+# Edit .env — set GCP_PROJECT_ID, DB_PASSWORD, adjust worker count
+
+# 2. Deploy (7 phases: APIs, SQL, secrets, Redis, VPC, main, workers)
+./deploy-queue.sh
+
+# 3. Update settings only
+./deploy-queue.sh --redeploy
+```
+
+### Additional resources vs. standard mode
+
+| Resource | Cost |
+|---|---|
+| Cloud Memorystore (Redis, 1 GB) | ~$35/month |
+| VPC Connector | ~$7/month |
+| Cloud Run Workers (1–5 instances) | ~$15–30/month |
+| **Additional total** | **~$55–70/month** |
+
+### Key variables
+
+| Variable | Description | Default |
+|---|---|---|
+| `WORKER_SERVICE` | Worker Cloud Run service name | `n8n-worker` |
+| `WORKER_MEMORY` | Worker container memory | `2Gi` |
+| `WORKER_MIN_INSTANCES` | Min worker instances | `1` |
+| `WORKER_MAX_INSTANCES` | Max worker instances | `5` |
+| `WORKER_CONCURRENCY` | Parallel executions per worker | `10` |
+| `REDIS_INSTANCE_NAME` | Memorystore instance name | `n8n-queue` |
+| `REDIS_SIZE_GB` | Redis memory size | `1` |
+| `VPC_CONNECTOR_NAME` | VPC connector for Redis access | `n8n-vpc-connector` |
+
+See [.env.queue.example](.env.queue.example) for the full configuration.
+
 ## License
 
 MIT
